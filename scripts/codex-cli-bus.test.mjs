@@ -410,6 +410,42 @@ test("different controllers can each own a local child with the same name", () =
   }
 });
 
+test("install-plugin writes a local marketplace-backed plugin", () => {
+  const bus = tempBus();
+  const marketplaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-cli-bus-marketplace-"));
+  try {
+    const installed = run(bus, [
+      "install-plugin",
+      "--marketplace-root",
+      marketplaceRoot,
+      "--marketplace-name",
+      "bus-test",
+      "--no-codex"
+    ]);
+    assert.equal(installed.codex_skipped, true);
+    assert.equal(installed.marketplace_name, "bus-test");
+    assert.equal(installed.plugin_selector, "codex-cli-bus@bus-test");
+
+    const marketplace = JSON.parse(fs.readFileSync(path.join(marketplaceRoot, ".agents", "plugins", "marketplace.json"), "utf8"));
+    assert.equal(marketplace.name, "bus-test");
+    assert.equal(marketplace.plugins[0].name, "codex-cli-bus");
+    assert.equal(marketplace.plugins[0].source.path, "./plugins/codex-cli-bus");
+
+    const pluginDir = path.join(marketplaceRoot, "plugins", "codex-cli-bus");
+    const manifest = JSON.parse(fs.readFileSync(path.join(pluginDir, ".codex-plugin", "plugin.json"), "utf8"));
+    const mcp = JSON.parse(fs.readFileSync(path.join(pluginDir, ".mcp.json"), "utf8"));
+    assert.equal(manifest.name, "codex-cli-bus");
+    assert.equal(manifest.mcpServers, "./.mcp.json");
+    assert.equal(mcp.mcpServers["codex-cli-bus"].command, process.execPath);
+    assert.match(mcp.mcpServers["codex-cli-bus"].args[0], /scripts\/mcp-server\.mjs$/);
+    assert.equal(mcp.mcpServers["codex-cli-bus"].env.CODEX_CLI_BUS_HOME, bus);
+    assert.ok(fs.existsSync(path.join(pluginDir, "skills", "cli-bus", "SKILL.md")));
+  } finally {
+    fs.rmSync(bus, { recursive: true, force: true });
+    fs.rmSync(marketplaceRoot, { recursive: true, force: true });
+  }
+});
+
 test("mcp server exposes natural-language agent tools", () => {
   const bus = tempBus();
   try {

@@ -21,7 +21,19 @@ Codex CLI Bus 是一个本地文件型消息总线，用来协调多个 Codex CL
 - 如果要启动真实 Codex worker，需要本机已安装并可执行 `codex` 命令。
 - 如果要作为 Codex 插件使用，需要本机 Codex CLI 支持插件和 MCP Server。
 
-本项目没有运行时 npm 依赖，直接用 Node.js 即可执行脚本。
+本项目没有运行时 npm 依赖。发布成 npm 包后会提供两个命令：
+
+```bash
+codex-cli-bus
+codex-cli-bus-mcp
+```
+
+源码开发时也可以用等价命令：
+
+```bash
+node scripts/codex-cli-bus.mjs
+node scripts/mcp-server.mjs
+```
 
 ## 目录结构
 
@@ -56,6 +68,46 @@ codex-cli-bus/
 export CODEX_CLI_BUS_HOME="$PWD/.bus"
 ```
 
+## 一键安装
+
+发布到 npm 后，用户只需要执行：
+
+```bash
+npm install -g codex-cli-bus
+codex-cli-bus install-plugin
+```
+
+`install-plugin` 会自动完成这些事情：
+
+- 在 `~/.codex-cli-bus/plugin-marketplace` 生成本地 Codex marketplace。
+- 在 marketplace 中生成 `codex-cli-bus` 插件目录。
+- 写入可用的 `.mcp.json`，让 MCP Server 指向当前 npm 包里的 `scripts/mcp-server.mjs`。
+- 执行 `codex plugin marketplace add ...`。
+- 执行 `codex plugin add codex-cli-bus@codex-cli-bus-local`。
+
+安装完成后，重新打开一个 Codex CLI 会话，让插件、技能和 MCP Server 生效。
+
+如果你正在本仓库里本地开发，可以先链接本地包：
+
+```bash
+npm link
+codex-cli-bus install-plugin
+```
+
+只生成插件文件、不执行 `codex plugin` 命令：
+
+```bash
+codex-cli-bus install-plugin --no-codex
+```
+
+自定义 marketplace 名称或目录：
+
+```bash
+codex-cli-bus install-plugin \
+  --marketplace-name my-bus \
+  --marketplace-root "$HOME/.codex-cli-bus/my-marketplace"
+```
+
 ## 快速开始
 
 进入项目目录后，先检查脚本是否可用：
@@ -68,14 +120,14 @@ npm test
 注册两个本地 agent：
 
 ```bash
-node scripts/codex-cli-bus.mjs register --agent cli-a --label controller
-node scripts/codex-cli-bus.mjs register --agent cli-b --label worker
+codex-cli-bus register --agent cli-a --label controller
+codex-cli-bus register --agent cli-b --label worker
 ```
 
 从 `cli-a` 给 `cli-b` 发送任务：
 
 ```bash
-node scripts/codex-cli-bus.mjs send \
+codex-cli-bus send \
   --from cli-a \
   --to cli-b \
   --type task \
@@ -85,13 +137,13 @@ node scripts/codex-cli-bus.mjs send \
 让 `cli-b` 领取任务：
 
 ```bash
-node scripts/codex-cli-bus.mjs poll --agent cli-b --claim
+codex-cli-bus poll --agent cli-b --claim
 ```
 
 领取后会返回一个 `message_id`，用它回复任务结果：
 
 ```bash
-node scripts/codex-cli-bus.mjs reply \
+codex-cli-bus reply \
   --from cli-b \
   --message msg_x \
   --text "Focused tests passed."
@@ -100,7 +152,7 @@ node scripts/codex-cli-bus.mjs reply \
 最后让 `cli-a` 查看回复：
 
 ```bash
-node scripts/codex-cli-bus.mjs poll --agent cli-a --claim
+codex-cli-bus poll --agent cli-a --claim
 ```
 
 其中 `msg_x` 需要替换成实际返回的消息 ID。
@@ -110,28 +162,28 @@ node scripts/codex-cli-bus.mjs poll --agent cli-a --claim
 查看帮助：
 
 ```bash
-node scripts/codex-cli-bus.mjs help
+codex-cli-bus help
 ```
 
 列出 agent：
 
 ```bash
-node scripts/codex-cli-bus.mjs list
-node scripts/codex-cli-bus.mjs list --viewer cli-a
-node scripts/codex-cli-bus.mjs list --owner cli-a
+codex-cli-bus list
+codex-cli-bus list --viewer cli-a
+codex-cli-bus list --owner cli-a
 ```
 
 查看单个 agent 或任务：
 
 ```bash
-node scripts/codex-cli-bus.mjs status --agent cli-b
-node scripts/codex-cli-bus.mjs status --task task_x
+codex-cli-bus status --agent cli-b
+codex-cli-bus status --task task_x
 ```
 
 发送普通消息：
 
 ```bash
-node scripts/codex-cli-bus.mjs send \
+codex-cli-bus send \
   --from cli-a \
   --to cli-b \
   --type message \
@@ -141,19 +193,19 @@ node scripts/codex-cli-bus.mjs send \
 查看任务列表：
 
 ```bash
-node scripts/codex-cli-bus.mjs tasks --viewer cli-a --limit 20
+codex-cli-bus tasks --viewer cli-a --limit 20
 ```
 
 查看事件日志：
 
 ```bash
-node scripts/codex-cli-bus.mjs events --viewer cli-a --limit 20
+codex-cli-bus events --viewer cli-a --limit 20
 ```
 
 停止一个 worker：
 
 ```bash
-node scripts/codex-cli-bus.mjs stop-agent \
+codex-cli-bus stop-agent \
   --from cli-a \
   --agent cli-b \
   --reason "No longer needed."
@@ -164,7 +216,7 @@ node scripts/codex-cli-bus.mjs stop-agent \
 如果希望 `cli-b` 常驻运行，并自动领取后续任务，可以使用：
 
 ```bash
-node scripts/codex-cli-bus.mjs start-worker \
+codex-cli-bus start-worker \
   --from cli-a \
   --agent cli-b \
   --workspace .
@@ -179,7 +231,7 @@ cli-a.cli-b
 如果同一个 owner 下的 `cli-b` 已经在线，默认会复用已有 worker。需要明确替换时再加：
 
 ```bash
-node scripts/codex-cli-bus.mjs start-worker \
+codex-cli-bus start-worker \
   --from cli-a \
   --agent cli-b \
   --workspace . \
@@ -189,7 +241,7 @@ node scripts/codex-cli-bus.mjs start-worker \
 调试时可以在前台运行 worker loop：
 
 ```bash
-node scripts/codex-cli-bus.mjs worker-loop \
+codex-cli-bus worker-loop \
   --agent cli-b \
   --workspace .
 ```
@@ -197,7 +249,7 @@ node scripts/codex-cli-bus.mjs worker-loop \
 启动一个交互式 Codex CLI worker：
 
 ```bash
-node scripts/codex-cli-bus.mjs launch-codex \
+codex-cli-bus launch-codex \
   --from cli-a \
   --agent cli-b \
   --workspace . \
@@ -208,7 +260,7 @@ node scripts/codex-cli-bus.mjs launch-codex \
 启动一个一次性的非交互式 `codex exec` worker：
 
 ```bash
-node scripts/codex-cli-bus.mjs spawn-codex \
+codex-cli-bus spawn-codex \
   --from cli-a \
   --agent cli-b \
   --workspace . \
@@ -232,7 +284,21 @@ $CODEX_CLI_BUS_HOME/logs/
 
 ### 安装步骤
 
-Codex 插件需要先通过 marketplace 暴露出来，再从 marketplace 安装插件。当前项目的开发目录通常长这样：
+推荐使用 npm 包的一键安装命令：
+
+```bash
+npm install -g codex-cli-bus
+codex-cli-bus install-plugin
+```
+
+安装命令默认使用 `codex-cli-bus-local` 作为 marketplace 名称。更新 npm 包后，重新执行一次即可刷新本地插件：
+
+```bash
+npm install -g codex-cli-bus@latest
+codex-cli-bus install-plugin
+```
+
+手动安装时，Codex 插件需要先通过 marketplace 暴露出来，再从 marketplace 安装插件。项目的开发目录通常长这样：
 
 ```text
 Cli-demo/
@@ -269,7 +335,7 @@ Cli-demo/
 }
 ```
 
-如果你保持上面的目录结构，在 `codex-cli-bus` 目录里执行：
+如果你保持上面的目录结构，在 `codex-cli-bus` 目录里可以手动执行：
 
 ```bash
 codex plugin marketplace add ..
@@ -297,13 +363,13 @@ codex plugin add codex-cli-bus@cli-demo
 给 cli-b 发消息：我刚改了协议，让它重新检查状态。
 ```
 
-如果从 GitHub 克隆后本地路径不同，请检查 `.mcp.json` 中 `scripts/mcp-server.mjs` 的路径是否指向当前仓库。开发或演示时也可以设置：
+如果从 GitHub 克隆后使用手动 marketplace 安装，请检查 `.mcp.json` 是否适合你的安装方式。npm 一键安装会生成独立的插件目录和 MCP 配置，不需要手动改路径。开发或演示时也可以设置：
 
 ```bash
 export CODEX_CLI_BUS_HOME="$PWD/.bus"
 ```
 
-插件更新后可以重新执行：
+手动 marketplace 安装的插件更新后可以重新执行：
 
 ```bash
 codex plugin add codex-cli-bus@cli-demo
@@ -387,7 +453,8 @@ npm test
 
 - `.bus/`、`node_modules/`、`.DS_Store` 已在 `.gitignore` 中忽略。
 - 不要提交运行时生成的 mailbox、task、event、log 文件。
-- 如果 `.mcp.json` 使用了本机绝对路径，发布前改成适合你仓库的路径或在 README 中提醒使用者修改。
+- 发布 npm 前先确认包名可用；如果 `codex-cli-bus` 已被占用，可以改成 scoped 包名，例如 `@your-name/codex-cli-bus`。
+- 公开发布 npm 包前，建议补充 `repository`、`license` 和作者信息。
 - 先执行 `npm run check` 和 `npm test`，确保脚本和协议测试通过。
 
 ## License

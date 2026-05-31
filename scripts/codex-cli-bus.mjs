@@ -9,6 +9,8 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const PROTOCOL_VERSION = "1.0";
+const PLUGIN_NAME = "codex-cli-bus";
+const DEFAULT_MARKETPLACE_NAME = "codex-cli-bus-local";
 const DEFAULT_STALE_MS = 120_000;
 const VALID_AGENT_ID = /^[A-Za-z0-9][A-Za-z0-9_.@-]{0,79}$/;
 const VALID_AGENT_STATUS = new Set([
@@ -59,6 +61,22 @@ function makeId(prefix) {
 
 function scriptPath() {
   return fileURLToPath(import.meta.url);
+}
+
+function realPathOrResolve(file) {
+  try {
+    return fs.realpathSync(file);
+  } catch {
+    return path.resolve(file);
+  }
+}
+
+function isCliEntrypoint() {
+  return Boolean(process.argv[1]) && realPathOrResolve(process.argv[1]) === realPathOrResolve(scriptPath());
+}
+
+function packageRoot() {
+  return path.resolve(path.dirname(scriptPath()), "..");
 }
 
 function defaultBusHome() {
@@ -138,6 +156,11 @@ function writeJsonAtomic(file, value) {
   const tempFile = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`);
   fs.writeFileSync(tempFile, `${JSON.stringify(value, null, 2)}\n`);
   fs.renameSync(tempFile, file);
+}
+
+function copyDirSync(source, destination) {
+  fs.rmSync(destination, { recursive: true, force: true });
+  fs.cpSync(source, destination, { recursive: true });
 }
 
 function appendJsonLine(file, value) {
@@ -1976,13 +1999,218 @@ function startWorker(root, input) {
   };
 }
 
+function pluginManifestForInstall() {
+  const root = packageRoot();
+  const packageJson = jsonFile(path.join(root, "package.json")) || {};
+  const sourceManifest = jsonFile(path.join(root, ".codex-plugin", "plugin.json")) || {};
+  return {
+    ...sourceManifest,
+    name: PLUGIN_NAME,
+    version: String(packageJson.version || sourceManifest.version || "0.1.0"),
+    description: String(packageJson.description || sourceManifest.description || "Local message bus and control plane for coordinating multiple Codex CLI agents."),
+    skills: "./skills/",
+    mcpServers: "./.mcp.json"
+  };
+}
+
+function marketplaceEntry() {
+  return {
+    name: PLUGIN_NAME,
+    source: {
+      source: "local",
+      path: `./plugins/${PLUGIN_NAME}`
+    },
+    policy: {
+      installation: "AVAILABLE",
+      authentication: "ON_INSTALL"
+    },
+    category: "Productivity"
+  };
+}
+
+function writeMarketplace(root, input) {
+  const marketplaceFile = path.join(root, ".agents", "plugins", "marketplace.json");
+  const existing = jsonFile(marketplaceFile);
+  if (existing?.name && input.marketplace_name && existing.name !== input.marketplace_name) {
+    throw new Error(`marketplace root already uses name ${existing.name}; pass --marketplace-name ${existing.name} or choose another --marketplace-root`);
+  }
+  const name = existing?.name || input.marketplace_name || DEFAULT_MARKETPLACE_NAME;
+  const entry = marketplaceEntry();
+  const plugins = [
+    ...(existing?.plugins || []).filter((plugin) => plugin?.name !== PLUGIN_NAME),
+    entry
+  ];
+  const marketplace = {
+    ...(existing || {}),
+    name,
+    interface: {
+      displayName: "Codex CLI Bus",
+      ...(existing?.interface || {})
+    },
+    plugins
+  };
+  writeJsonAtomic(marketplaceFile, marketplace);
+  return { marketplace, marketplace_file: marketplaceFile };
+}
+
+function writePluginInstallFiles(input) {
+  const root = packageRoot();
+  const marketplaceRoot = path.resolve(input.marketplace_root);
+  const pluginDir = path.join(marketplaceRoot, "plugins", PLUGIN_NAME);
+  const sourceSkillDir = path.join(root, "skills");
+  const sourcePluginMetaDir = path.join(root, ".codex-plugin");
+  const mcpServerPath = path.join(root, "scripts", "mcp-server.mjs");
+  if (!fs.existsSync(mcpServerPath)) {
+    throw new Error(`missing MCP server: ${mcpServerPath}`);
+  }
+  if (!fs.existsSync(sourceSkillDir)) {
+    throw new Error(`missing skills directory: ${sourceSkillDir}`);
+  }
+  if (!fs.existsSync(sourcePluginMetaDir)) {
+    throw new Error(`missing plugin metadata directory: ${sourcePluginMetaDir}`);
+  }
+
+  fs.rmSync(pluginDir, { recursive: true, force: true });
+  ensureDir(pluginDir);
+  copyDirSync(sourceSkillDir, path.join(pluginDir, "skills"));
+  ensureDir(path.join(pluginDir, ".codex-plugin"));
+  writeJsonAtomic(path.join(pluginDir, ".codex-plugin", "plugin.json"), pluginManifestForInstall());
+  writeJsonAtomic(path.join(pluginDir, ".mcp.json"), {
+    mcpServers: {
+      [PLUGIN_NAME]: {
+        command: process.execPath,
+        args: [mcpServerPath],
+        env: {
+          CODEX_CLI_BUS_HOME: input.bus_home
+        }
+      }
+    }
+  });
+  const marketplace = writeMarketplace(marketplaceRoot, input);
+  return {
+    plugin_dir: pluginDir,
+    mcp_server: mcpServerPath,
+    ...marketplace
+  };
+}
+
+function parseMarketplaceList(stdout) {
+  return String(stdout || "")
+    .split("\n")
+    .slice(1)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(/^(\S+)\s+(.+)$/);
+      return match ? { name: match[1], root: match[2] } : { name: line, root: "" };
+    })
+    .filter((entry) => entry.name);
+}
+
+function runCodex(args) {
+  const result = spawnSync("codex", args, {
+    encoding: "utf8",
+    env: process.env
+  });
+  return {
+    command: ["codex", ...args],
+    ok: result.status === 0,
+    status: result.status,
+    signal: result.signal || null,
+    stdout: result.stdout || "",
+    stderr: result.stderr || "",
+    error: result.error ? result.error.message : null
+  };
+}
+
+function installCodexPlugin(busHome, input = {}) {
+  const marketplaceRoot = path.resolve(input.marketplace_root || path.join(busHome, "plugin-marketplace"));
+  const marketplaceName = input.marketplace_name || DEFAULT_MARKETPLACE_NAME;
+  const plan = {
+    marketplace_root: marketplaceRoot,
+    marketplace_name: marketplaceName,
+    bus_home: busHome,
+    package_root: packageRoot(),
+    plugin_selector: `${PLUGIN_NAME}@${marketplaceName}`,
+    commands: [
+      ["codex", "plugin", "marketplace", "add", marketplaceRoot],
+      ["codex", "plugin", "add", `${PLUGIN_NAME}@${marketplaceName}`]
+    ]
+  };
+
+  if (input.dry_run) {
+    return {
+      dry_run: true,
+      installed: false,
+      ...plan
+    };
+  }
+
+  const files = writePluginInstallFiles({
+    marketplace_root: marketplaceRoot,
+    marketplace_name: marketplaceName,
+    bus_home: busHome
+  });
+  const marketplaceNameFromFile = files.marketplace.name;
+  const pluginSelector = `${PLUGIN_NAME}@${marketplaceNameFromFile}`;
+  const commands = [];
+  if (!input.no_codex) {
+    const listed = runCodex(["plugin", "marketplace", "list"]);
+    commands.push({ step: "marketplace-list", ...listed });
+    if (!listed.ok) {
+      throw new Error(`failed to list Codex marketplaces: ${listed.error || listed.stderr || listed.stdout}`);
+    }
+    const configured = parseMarketplaceList(listed.stdout).find((entry) => entry.name === marketplaceNameFromFile);
+    if (configured && path.resolve(configured.root) !== marketplaceRoot) {
+      throw new Error(`Codex marketplace ${marketplaceNameFromFile} is already configured at ${configured.root}; pass --marketplace-name to use a different name`);
+    }
+    if (!configured) {
+      const addedMarketplace = runCodex(["plugin", "marketplace", "add", marketplaceRoot]);
+      commands.push({ step: "marketplace-add", ...addedMarketplace });
+      if (!addedMarketplace.ok) {
+        throw new Error(`failed to add Codex marketplace: ${addedMarketplace.error || addedMarketplace.stderr || addedMarketplace.stdout}`);
+      }
+    } else {
+      commands.push({
+        step: "marketplace-add",
+        command: ["codex", "plugin", "marketplace", "add", marketplaceRoot],
+        ok: true,
+        skipped: true,
+        reason: `marketplace ${marketplaceNameFromFile} is already configured`
+      });
+    }
+    const addedPlugin = runCodex(["plugin", "add", pluginSelector]);
+    commands.push({ step: "plugin-add", ...addedPlugin });
+    if (!addedPlugin.ok) {
+      throw new Error(`failed to install Codex plugin: ${addedPlugin.error || addedPlugin.stderr || addedPlugin.stdout}`);
+    }
+  }
+
+  return {
+    installed: !input.no_codex,
+    codex_skipped: Boolean(input.no_codex),
+    marketplace_root: marketplaceRoot,
+    marketplace_name: marketplaceNameFromFile,
+    plugin_selector: pluginSelector,
+    bus_home: busHome,
+    package_root: packageRoot(),
+    ...files,
+    commands,
+    next_steps: [
+      "Start a new Codex CLI session so the plugin skill and MCP tools are loaded.",
+      "Ask: 查看所有 Codex CLI agent 的状态。"
+    ]
+  };
+}
+
 function helpText() {
   return `Codex CLI Bus
 
 Usage:
-  node scripts/codex-cli-bus.mjs <command> [options]
+  codex-cli-bus <command> [options]
 
 Commands:
+  install-plugin Register and install the Codex CLI plugin locally
   register       Register or update an agent in the local registry
   heartbeat      Refresh agent state and current task
   list           List known agents and mailbox counts
@@ -2012,16 +2240,20 @@ Common options:
   --stdin              Read text from stdin
   --replace            Replace an existing online agent with the same id
   --allow-variant      Intentionally start a fallback/default variant agent
+  --marketplace-root   install-plugin output root; default ~/.codex-cli-bus/plugin-marketplace
+  --marketplace-name   install-plugin marketplace name; default codex-cli-bus-local
+  --no-codex           Write plugin files without running codex plugin commands
 
 Examples:
-  node scripts/codex-cli-bus.mjs register --agent cli-a --label controller
-  node scripts/codex-cli-bus.mjs list --viewer cli-a
-  node scripts/codex-cli-bus.mjs list --owner cli-a
-  node scripts/codex-cli-bus.mjs send --from cli-a --to cli-b --type task --text "Run tests"
-  node scripts/codex-cli-bus.mjs poll --agent cli-b --claim
-  node scripts/codex-cli-bus.mjs reply --from cli-b --message msg_x --text "Tests passed"
-  node scripts/codex-cli-bus.mjs launch-codex --from cli-a --agent cli-b --open-terminal --text "Run tests"
-  node scripts/codex-cli-bus.mjs start-worker --from cli-a --agent cli-b --workspace .
+  codex-cli-bus install-plugin
+  codex-cli-bus register --agent cli-a --label controller
+  codex-cli-bus list --viewer cli-a
+  codex-cli-bus list --owner cli-a
+  codex-cli-bus send --from cli-a --to cli-b --type task --text "Run tests"
+  codex-cli-bus poll --agent cli-b --claim
+  codex-cli-bus reply --from cli-b --message msg_x --text "Tests passed"
+  codex-cli-bus launch-codex --from cli-a --agent cli-b --open-terminal --text "Run tests"
+  codex-cli-bus start-worker --from cli-a --agent cli-b --workspace .
 `;
 }
 
@@ -2035,6 +2267,17 @@ async function runCommand(argv) {
     case "-h":
       process.stdout.write(helpText());
       return null;
+
+    case "install-plugin": {
+      const installed = installCodexPlugin(root, {
+        marketplace_root: option(opts, "marketplace-root", "marketplace_root"),
+        marketplace_name: option(opts, "marketplace-name", "marketplace_name"),
+        dry_run: boolOption(opts, "dry-run", "dry_run"),
+        no_codex: boolOption(opts, "no-codex", "no_codex")
+      });
+      output({ ok: true, ...installed });
+      return installed;
+    }
 
     case "register": {
       const agent = registerAgent(root, {
@@ -2356,7 +2599,7 @@ async function runCommand(argv) {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === scriptPath()) {
+if (isCliEntrypoint()) {
   runCommand(process.argv.slice(2)).catch((error) => {
     process.stderr.write(`${JSON.stringify({ ok: false, error: error.message }, null, 2)}\n`);
     process.exitCode = 1;
@@ -2371,7 +2614,9 @@ export {
   getBusHome,
   heartbeatAgent,
   launchCodex,
+  installCodexPlugin,
   listTasks,
+  packageRoot,
   pollMessages,
   readAgents,
   readEvents,

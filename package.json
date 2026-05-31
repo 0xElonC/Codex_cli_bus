@@ -1,8 +1,23 @@
 {
   "name": "codex-cli-bus",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.1.1",
+  "description": "Local message bus and control plane for coordinating multiple Codex CLI agents.",
   "type": "module",
+  "bin": {
+    "codex-cli-bus": "./scripts/codex-cli-bus.mjs",
+    "codex-cli-bus-mcp": "./scripts/mcp-server.mjs"
+  },
+  "files": [
+    ".codex-plugin/",
+    ".mcp.json",
+    "docs/",
+    "scripts/",
+    "skills/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "check": "node --check scripts/codex-cli-bus.mjs && node --check scripts/mcp-server.mjs",
     "test": "node --test scripts/*.test.mjs"

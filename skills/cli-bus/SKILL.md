@@ -46,7 +46,13 @@ Agent identity rules:
 - If one main CLI needs another main CLI to create a worker, send a task to that main CLI and let the receiver start its own local child under its own namespace.
 - Do not pass `model` in MCP calls unless the user explicitly named the model. When the user did name it, also set `model_requested_by_user: true`.
 
-Script path from this plugin root:
+CLI fallback command:
+
+```bash
+codex-cli-bus
+```
+
+When working directly from this source repo before npm linking, the equivalent command is:
 
 ```bash
 node scripts/codex-cli-bus.mjs
@@ -60,7 +66,7 @@ Agent ids must match `^[A-Za-z0-9][A-Za-z0-9_.@-]{0,79}$`.
 Register the current agent before sending or receiving messages:
 
 ```bash
-node scripts/codex-cli-bus.mjs register --agent cli-a --label controller
+codex-cli-bus register --agent cli-a --label controller
 ```
 
 If the environment already has `CODEX_AGENT_ID`, the script can use it instead of `--agent`.
@@ -71,21 +77,21 @@ Use `CODEX_CLI_BUS_HOME` to share a non-default bus directory across terminals.
 List all known agents:
 
 ```bash
-node scripts/codex-cli-bus.mjs list
-node scripts/codex-cli-bus.mjs list --viewer cli-a
-node scripts/codex-cli-bus.mjs list --owner cli-a
+codex-cli-bus list
+codex-cli-bus list --viewer cli-a
+codex-cli-bus list --owner cli-a
 ```
 
 Inspect one agent:
 
 ```bash
-node scripts/codex-cli-bus.mjs status --agent cli-b
+codex-cli-bus status --agent cli-b
 ```
 
 Inspect one task:
 
 ```bash
-node scripts/codex-cli-bus.mjs status --task task_x
+codex-cli-bus status --task task_x
 ```
 
 Use these commands when the user asks natural-language questions like "what are the other CLIs doing?", "is cli-b blocked?", or "which worker has pending messages?" Summarize the JSON fields `status`, `current_task`, `liveness`, `queued_messages`, and `processing_messages`.
@@ -95,25 +101,25 @@ Use these commands when the user asks natural-language questions like "what are 
 Send a task:
 
 ```bash
-node scripts/codex-cli-bus.mjs send --from cli-a --to cli-b --type task --text "Run the focused tests and report failures."
+codex-cli-bus send --from cli-a --to cli-b --type task --text "Run the focused tests and report failures."
 ```
 
 Send a plain message:
 
 ```bash
-node scripts/codex-cli-bus.mjs send --from cli-a --to cli-b --type message --text "I updated the branch; please re-check."
+codex-cli-bus send --from cli-a --to cli-b --type message --text "I updated the branch; please re-check."
 ```
 
 The recipient claims work with:
 
 ```bash
-node scripts/codex-cli-bus.mjs poll --agent cli-b --claim
+codex-cli-bus poll --agent cli-b --claim
 ```
 
 Reply to the parent:
 
 ```bash
-node scripts/codex-cli-bus.mjs reply --from cli-b --message msg_x --text "Tests passed."
+codex-cli-bus reply --from cli-b --message msg_x --text "Tests passed."
 ```
 
 Use `--type error` on `reply` when the worker is blocked or failed.
@@ -123,7 +129,7 @@ Use `--type error` on `reply` when the worker is blocked or failed.
 For repeated delegation, start a persistent worker loop. This is the right choice when the user wants to keep sending tasks to an agent and have that agent automatically pick them up:
 
 ```bash
-node scripts/codex-cli-bus.mjs start-worker --from cli-a --agent cli-b --workspace .
+codex-cli-bus start-worker --from cli-a --agent cli-b --workspace .
 ```
 
 This stores the child internally as `cli-a.cli-b`, but the user can continue referring to it as `cli-b` from `cli-a`.
@@ -131,13 +137,13 @@ This stores the child internally as `cli-a.cli-b`, but the user can continue ref
 The foreground form is useful for debugging:
 
 ```bash
-node scripts/codex-cli-bus.mjs worker-loop --agent cli-b --workspace .
+codex-cli-bus worker-loop --agent cli-b --workspace .
 ```
 
 For a real interactive Codex CLI worker in a new macOS Terminal window, use:
 
 ```bash
-node scripts/codex-cli-bus.mjs launch-codex --from cli-a --agent cli-b --workspace . --open-terminal --text "Audit the parser and reply with findings."
+codex-cli-bus launch-codex --from cli-a --agent cli-b --workspace . --open-terminal --text "Audit the parser and reply with findings."
 ```
 
 The new CLI starts with a bootstrap prompt that tells it how to claim one task and reply through the bus. It does not automatically listen for later tasks after that task is complete.
@@ -147,7 +153,7 @@ If a terminal should not be opened automatically, omit `--open-terminal`; the co
 For a one-shot non-interactive worker, use:
 
 ```bash
-node scripts/codex-cli-bus.mjs spawn-codex --from cli-a --agent cli-b --workspace . --text "Audit the parser and reply with findings."
+codex-cli-bus spawn-codex --from cli-a --agent cli-b --workspace . --text "Audit the parser and reply with findings."
 ```
 
 This starts `codex exec`, sends an initial task into the bus, and writes logs under the bus `logs/` directory. Use this only when the user has asked to delegate work or when delegation is necessary for the task.
@@ -155,7 +161,7 @@ This starts `codex exec`, sends an initial task into the bus, and writes logs un
 For a generic local process:
 
 ```bash
-node scripts/codex-cli-bus.mjs spawn --agent cli-b --workspace . -- node ./worker.js
+codex-cli-bus spawn --agent cli-b --workspace . -- node ./worker.js
 ```
 
 ## Long-Running Work
@@ -163,25 +169,25 @@ node scripts/codex-cli-bus.mjs spawn --agent cli-b --workspace . -- node ./worke
 Refresh status during long work:
 
 ```bash
-node scripts/codex-cli-bus.mjs heartbeat --agent cli-b --status running --task "running integration tests"
+codex-cli-bus heartbeat --agent cli-b --status running --task "running integration tests"
 ```
 
 Mark a task manually if no reply should be sent:
 
 ```bash
-node scripts/codex-cli-bus.mjs complete --task task_x --status blocked --summary "Waiting for credentials."
+codex-cli-bus complete --task task_x --status blocked --summary "Waiting for credentials."
 ```
 
 Cancel work:
 
 ```bash
-node scripts/codex-cli-bus.mjs cancel --from cli-a --task task_x --reason "Superseded by a newer task."
+codex-cli-bus cancel --from cli-a --task task_x --reason "Superseded by a newer task."
 ```
 
 Stop a worker that should no longer run:
 
 ```bash
-node scripts/codex-cli-bus.mjs stop-agent --from cli-a --agent cli-b --reason "No longer needed."
+codex-cli-bus stop-agent --from cli-a --agent cli-b --reason "No longer needed."
 ```
 
 ## Safety

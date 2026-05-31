@@ -1,13 +1,8 @@
 {
   "mcpServers": {
     "codex-cli-bus": {
-      "command": "node",
-      "args": [
-        "/Users/celon/Gate/Cli-demo/codex-cli-bus/scripts/mcp-server.mjs"
-      ],
-      "env": {
-        "CODEX_CLI_BUS_HOME": "/Users/celon/Gate/Cli-demo/codex-cli-bus/.bus"
-      }
+      "command": "codex-cli-bus-mcp",
+      "args": []
     }
   }
 }

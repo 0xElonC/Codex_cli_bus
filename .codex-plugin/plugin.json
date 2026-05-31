@@ -1,6 +1,6 @@
 {
   "name": "codex-cli-bus",
-  "version": "0.1.0+codex.20260523082004",
+  "version": "0.1.1",
   "description": "Local message bus and control plane for coordinating multiple Codex CLI agents.",
   "author": {
     "name": "Local developer"
