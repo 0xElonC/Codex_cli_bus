@@ -6,6 +6,78 @@ Codex CLI Bus 是一个本地文件型消息总线，用来协调多个 Codex CL
 
 详细架构说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
+## 安装和加入插件
+
+### 1. 下载 npm 包
+
+```bash
+npm install -g codex-cli-bus
+```
+
+如果你的 npm registry 指向镜像源且还没有同步到最新版本，可以指定官方源：
+
+```bash
+npm install -g codex-cli-bus --registry=https://registry.npmjs.org/
+```
+
+确认命令可用：
+
+```bash
+codex-cli-bus help
+```
+
+### 2. 加入 Codex CLI 插件
+
+执行一键安装：
+
+```bash
+codex-cli-bus install-plugin
+```
+
+这个命令会自动完成：
+
+- 在 `~/.codex-cli-bus/plugin-marketplace` 生成本地 Codex marketplace。
+- 在 marketplace 中生成 `codex-cli-bus` 插件目录。
+- 写入 MCP Server 配置。
+- 执行 `codex plugin marketplace add ...`。
+- 执行 `codex plugin add codex-cli-bus@codex-cli-bus-local`。
+
+检查插件是否加入成功：
+
+```bash
+codex plugin marketplace list
+codex plugin list --marketplace codex-cli-bus-local
+```
+
+正常情况下会看到 `codex-cli-bus-local` marketplace，以及 `codex-cli-bus` 插件。
+
+安装后重新打开一个新的 Codex CLI 会话，让插件、技能和 MCP Server 生效。然后可以直接对 Codex 说：
+
+```text
+查看所有 Codex CLI agent 当前状态。
+```
+
+或者：
+
+```text
+启动 cli-b 常驻 worker，让它自动领取后续任务。
+```
+
+### 3. 更新插件
+
+```bash
+npm install -g codex-cli-bus@latest --registry=https://registry.npmjs.org/
+codex-cli-bus install-plugin
+```
+
+更新后同样需要重新打开一个新的 Codex CLI 会话。
+
+只想预览安装计划、不真正写入或安装时：
+
+```bash
+codex-cli-bus install-plugin --dry-run
+```
+
 ## 功能特性
 
 - 本地文件协议，无需数据库或远程服务。
@@ -21,7 +93,7 @@ Codex CLI Bus 是一个本地文件型消息总线，用来协调多个 Codex CL
 - 如果要启动真实 Codex worker，需要本机已安装并可执行 `codex` 命令。
 - 如果要作为 Codex 插件使用，需要本机 Codex CLI 支持插件和 MCP Server。
 
-本项目没有运行时 npm 依赖。发布成 npm 包后会提供两个命令：
+本项目没有运行时 npm 依赖。npm 包会提供两个命令：
 
 ```bash
 codex-cli-bus
@@ -66,46 +138,6 @@ codex-cli-bus/
 
 ```bash
 export CODEX_CLI_BUS_HOME="$PWD/.bus"
-```
-
-## 一键安装
-
-发布到 npm 后，用户只需要执行：
-
-```bash
-npm install -g codex-cli-bus
-codex-cli-bus install-plugin
-```
-
-`install-plugin` 会自动完成这些事情：
-
-- 在 `~/.codex-cli-bus/plugin-marketplace` 生成本地 Codex marketplace。
-- 在 marketplace 中生成 `codex-cli-bus` 插件目录。
-- 写入可用的 `.mcp.json`，让 MCP Server 指向当前 npm 包里的 `scripts/mcp-server.mjs`。
-- 执行 `codex plugin marketplace add ...`。
-- 执行 `codex plugin add codex-cli-bus@codex-cli-bus-local`。
-
-安装完成后，重新打开一个 Codex CLI 会话，让插件、技能和 MCP Server 生效。
-
-如果你正在本仓库里本地开发，可以先链接本地包：
-
-```bash
-npm link
-codex-cli-bus install-plugin
-```
-
-只生成插件文件、不执行 `codex plugin` 命令：
-
-```bash
-codex-cli-bus install-plugin --no-codex
-```
-
-自定义 marketplace 名称或目录：
-
-```bash
-codex-cli-bus install-plugin \
-  --marketplace-name my-bus \
-  --marketplace-root "$HOME/.codex-cli-bus/my-marketplace"
 ```
 
 ## 快速开始
@@ -273,7 +305,7 @@ worker 日志会写入：
 $CODEX_CLI_BUS_HOME/logs/
 ```
 
-## 作为 Codex CLI 插件使用
+## 手动插件安装
 
 仓库中已经包含插件配置：
 
@@ -282,23 +314,7 @@ $CODEX_CLI_BUS_HOME/logs/
 - `skills/cli-bus/SKILL.md`
 - `scripts/mcp-server.mjs`
 
-### 安装步骤
-
-推荐使用 npm 包的一键安装命令：
-
-```bash
-npm install -g codex-cli-bus
-codex-cli-bus install-plugin
-```
-
-安装命令默认使用 `codex-cli-bus-local` 作为 marketplace 名称。更新 npm 包后，重新执行一次即可刷新本地插件：
-
-```bash
-npm install -g codex-cli-bus@latest
-codex-cli-bus install-plugin
-```
-
-手动安装时，Codex 插件需要先通过 marketplace 暴露出来，再从 marketplace 安装插件。项目的开发目录通常长这样：
+正常使用推荐前面的 `codex-cli-bus install-plugin`。如果你需要手动维护 marketplace，目录通常长这样：
 
 ```text
 Cli-demo/
@@ -363,7 +379,9 @@ codex plugin add codex-cli-bus@cli-demo
 给 cli-b 发消息：我刚改了协议，让它重新检查状态。
 ```
 
-如果从 GitHub 克隆后使用手动 marketplace 安装，请检查 `.mcp.json` 是否适合你的安装方式。npm 一键安装会生成独立的插件目录和 MCP 配置，不需要手动改路径。开发或演示时也可以设置：
+如果从 GitHub 克隆后使用手动 marketplace 安装，请检查 `.mcp.json` 是否适合你的安装方式。npm 一键安装会生成独立的插件目录和 MCP 配置，不需要手动改路径。
+
+开发或演示时也可以设置：
 
 ```bash
 export CODEX_CLI_BUS_HOME="$PWD/.bus"
