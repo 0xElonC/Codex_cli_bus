@@ -1,0 +1,28 @@
+{
+  "name": "codex-cli-bus",
+  "version": "0.1.0+codex.20260523082004",
+  "description": "Local message bus and control plane for coordinating multiple Codex CLI agents.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Codex CLI Bus",
+    "shortDescription": "Send tasks, messages, and status checks across local Codex CLI agents.",
+    "longDescription": "Codex CLI Bus provides a file-backed local protocol, registry, and command-line tools for coordinating multiple Codex CLI agents from one active session.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [
+      "Automation",
+      "Interactive",
+      "MCP",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "\u542f\u52a8 cli-b \u5e38\u9a7b worker\uff0c\u8ba9\u5b83\u81ea\u52a8\u9886\u53d6\u4efb\u52a1\u3002",
+      "\u67e5\u770b\u6240\u6709 Codex CLI agent \u7684\u72b6\u6001\u3002",
+      "\u8ba9 cli-b \u68c0\u67e5\u5f53\u524d\u4efb\u52a1\u662f\u5426\u5361\u4f4f\u3002"
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "codex-cli-bus",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check scripts/codex-cli-bus.mjs && node --check scripts/mcp-server.mjs",
+    "test": "node --test scripts/*.test.mjs"
+  }
+}

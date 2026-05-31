@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.codex-cli-bus/protocol.schema.json",
+  "title": "Codex CLI Bus Protocol",
+  "description": "File-backed protocol records for coordinating local Codex CLI agents.",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/agent" },
+    { "$ref": "#/$defs/message" },
+    { "$ref": "#/$defs/task" },
+    { "$ref": "#/$defs/event" }
+  ],
+  "$defs": {
+    "protocolVersion": {
+      "const": "1.0"
+    },
+    "agentId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.@-]{0,79}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "agentStatus": {
+      "enum": [
+        "idle",
+        "running",
+        "waiting_for_user",
+        "waiting_for_agent",
+        "blocked",
+        "completed",
+        "failed",
+        "exited",
+        "unknown"
+      ]
+    },
+    "messageType": {
+      "enum": [
+        "task",
+        "message",
+        "result",
+        "error",
+        "cancel",
+        "status_request",
+        "status_response",
+        "heartbeat",
+        "ack"
+      ]
+    },
+    "taskStatus": {
+      "enum": [
+        "queued",
+        "running",
+        "waiting_for_user",
+        "waiting_for_agent",
+        "blocked",
+        "completed",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "agent": {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "agent_id",
+        "session_id",
+        "status",
+        "created_at",
+        "last_seen_at"
+      ],
+      "properties": {
+        "protocol_version": { "$ref": "#/$defs/protocolVersion" },
+        "agent_id": { "$ref": "#/$defs/agentId" },
+        "local_agent_id": { "$ref": "#/$defs/agentId" },
+        "session_id": { "type": "string" },
+        "owner_agent_id": {
+          "anyOf": [
+            { "$ref": "#/$defs/agentId" },
+            { "type": "null" }
+          ]
+        },
+        "parent_agent_id": {
+          "anyOf": [
+            { "$ref": "#/$defs/agentId" },
+            { "type": "null" }
+          ]
+        },
+        "label": { "type": "string" },
+        "pid": { "type": "integer" },
+        "process": {
+          "type": "object",
+          "properties": {
+            "pid": { "type": "integer" },
+            "command": {
+              "type": ["array", "null"],
+              "items": { "type": "string" }
+            },
+            "started_at": { "$ref": "#/$defs/timestamp" },
+            "exit_code": { "type": ["integer", "null"] }
+          },
+          "additionalProperties": true
+        },
+        "workspace": { "type": "string" },
+        "cwd": { "type": "string" },
+        "status": { "$ref": "#/$defs/agentStatus" },
+        "current_task": {
+          "type": ["object", "null"],
+          "properties": {
+            "task_id": { "type": ["string", "null"] },
+            "summary": { "type": "string" },
+            "started_at": { "$ref": "#/$defs/timestamp" }
+          },
+          "additionalProperties": true
+        },
+        "created_at": { "$ref": "#/$defs/timestamp" },
+        "last_seen_at": { "$ref": "#/$defs/timestamp" },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "message": {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "id",
+        "conversation_id",
+        "from",
+        "to",
+        "type",
+        "payload",
+        "created_at",
+        "status"
+      ],
+      "properties": {
+        "protocol_version": { "$ref": "#/$defs/protocolVersion" },
+        "id": { "type": "string", "pattern": "^msg_" },
+        "conversation_id": { "type": "string", "pattern": "^conv_" },
+        "parent_id": { "type": ["string", "null"] },
+        "task_id": { "type": ["string", "null"] },
+        "from": { "$ref": "#/$defs/agentId" },
+        "to": { "$ref": "#/$defs/agentId" },
+        "type": { "$ref": "#/$defs/messageType" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "created_at": { "$ref": "#/$defs/timestamp" },
+        "timeout_ms": { "type": ["integer", "null"], "minimum": 1 },
+        "status": {
+          "enum": [
+            "queued",
+            "delivered",
+            "acknowledged",
+            "completed",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "delivery": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "task": {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "task_id",
+        "conversation_id",
+        "originator",
+        "assignee",
+        "status",
+        "objective",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "protocol_version": { "$ref": "#/$defs/protocolVersion" },
+        "task_id": { "type": "string", "pattern": "^task_" },
+        "conversation_id": { "type": "string", "pattern": "^conv_" },
+        "originator": { "$ref": "#/$defs/agentId" },
+        "assignee": { "$ref": "#/$defs/agentId" },
+        "status": { "$ref": "#/$defs/taskStatus" },
+        "objective": { "type": "string" },
+        "message_id": { "type": "string" },
+        "created_at": { "$ref": "#/$defs/timestamp" },
+        "updated_at": { "$ref": "#/$defs/timestamp" },
+        "completed_at": { "$ref": "#/$defs/timestamp" },
+        "result_message_id": { "type": "string" },
+        "error_message_id": { "type": "string" },
+        "summary": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "event_id",
+        "type",
+        "created_at"
+      ],
+      "properties": {
+        "protocol_version": { "$ref": "#/$defs/protocolVersion" },
+        "event_id": { "type": "string", "pattern": "^evt_" },
+        "type": { "type": "string" },
+        "created_at": { "$ref": "#/$defs/timestamp" },
+        "agent_id": { "$ref": "#/$defs/agentId" },
+        "from": { "$ref": "#/$defs/agentId" },
+        "to": { "$ref": "#/$defs/agentId" },
+        "message_id": { "type": "string" },
+        "task_id": { "type": "string" },
+        "conversation_id": { "type": "string" },
+        "detail": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}
