@@ -230,7 +230,56 @@ $CODEX_CLI_BUS_HOME/logs/
 - `skills/cli-bus/SKILL.md`
 - `scripts/mcp-server.mjs`
 
-安装到本地 Codex 插件后，重新打开一个 Codex CLI 会话，让插件和 MCP Server 生效。之后可以直接用自然语言操作：
+### 安装步骤
+
+Codex 插件需要先通过 marketplace 暴露出来，再从 marketplace 安装插件。当前项目的开发目录通常长这样：
+
+```text
+Cli-demo/
+  .agents/
+    plugins/
+      marketplace.json
+  codex-cli-bus/
+    .codex-plugin/
+      plugin.json
+```
+
+`marketplace.json` 中需要包含 `codex-cli-bus` 这一项，例如：
+
+```json
+{
+  "name": "cli-demo",
+  "interface": {
+    "displayName": "CLI Demo"
+  },
+  "plugins": [
+    {
+      "name": "codex-cli-bus",
+      "source": {
+        "source": "local",
+        "path": "./codex-cli-bus"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
+```
+
+如果你保持上面的目录结构，在 `codex-cli-bus` 目录里执行：
+
+```bash
+codex plugin marketplace add ..
+codex plugin list --marketplace cli-demo
+codex plugin add codex-cli-bus@cli-demo
+```
+
+如果你是在别的位置维护 marketplace，把 `..` 换成包含 `.agents/plugins/marketplace.json` 的目录即可。
+
+安装后重新打开一个 Codex CLI 会话，让插件、技能和 MCP Server 生效。之后可以直接用自然语言操作：
 
 ```text
 启动一个叫 cli-b 的 Codex CLI，让它在当前目录跑 npm test，然后把结果回给我。
@@ -253,6 +302,14 @@ $CODEX_CLI_BUS_HOME/logs/
 ```bash
 export CODEX_CLI_BUS_HOME="$PWD/.bus"
 ```
+
+插件更新后可以重新执行：
+
+```bash
+codex plugin add codex-cli-bus@cli-demo
+```
+
+然后开启新的 Codex CLI 会话测试更新后的插件。
 
 ## Agent 命名规则
 
